@@ -1,4 +1,4 @@
-from flask import Flask, Response, request, jsonify
+from flask import Flask, Response, request, jsonify, render_template
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Gauge, Counter, Histogram
 import psutil
 import time
@@ -221,24 +221,17 @@ def get_ocr_time():
 def index():
     # 기본 페이지
     http_requests_total.labels(method='GET', endpoint='/', status='200').inc()
-    return '''
-    <h1>Visionix Device WebServer</h1>
-    <p>시스템 메트릭을 확인하려면 <a href="/metrics">/metrics</a>를 방문하세요.</p>
-    <p>현재 상태를 확인하려면 <a href="/status">/status</a>를 방문하세요.</p>
-    <p>OCR 시간값을 확인하려면 <a href="/ocr">/ocr</a>를 방문하세요.</p>
-    <h3>Status API 사용법:</h3>
-    <ul>
-        <li><strong>GET /status</strong>: 현재 상태 조회</li>
-        <li><strong>POST /status</strong>: 상태 업데이트 (JSON: {"status": 1})</li>
-    </ul>
-    <h3>OCR API 사용법:</h3>
-    <ul>
-        <li><strong>GET /ocr</strong>: 현재 OCR 시간값 조회</li>
-        <li><strong>POST /ocr</strong>: OCR 시간값 업데이트</li>
-        <li style="margin-left: 20px;">숫자: <code>{"time": 123.45}</code></li>
-        <li style="margin-left: 20px;">시간 문자열: <code>{"time": "14:30:25"}</code></li>
-    </ul>
-    '''
+    return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000) 
+    import webbrowser
+    from threading import Timer
+    
+    def open_browser():
+        webbrowser.open('http://localhost:5000')
+    
+    # 서버가 시작된 후 0.5초 후에 브라우저 열기
+    Timer(0.5, open_browser).start()
+    
+    # 서버 시작
+    app.run(host='0.0.0.0', port=5000, debug=True) 
