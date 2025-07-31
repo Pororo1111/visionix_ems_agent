@@ -18,6 +18,7 @@ g_mem_used = Gauge('system_memory_used_bytes', 'Used memory in bytes')
 
 # OCR 메트릭
 g_ocr_time = Gauge('ocr_time_value', 'OCR time value from external program')
+g_ocr_timestamp = Gauge('ocr_timestamp_seconds', 'Timestamp of the last OCR time check')
 
 # 디스크 메트릭
 g_disk_usage = Gauge('system_disk_usage_percent', 'Disk usage percent', ['device', 'mountpoint'])
@@ -186,6 +187,7 @@ def update_ocr_time():
         
         # g_ocr_time 값 업데이트
         g_ocr_time.set(timestamp)
+        g_ocr_timestamp.set(time.time())
         
         http_requests_total.labels(method='POST', endpoint='/ocr', status='200').inc()
         return jsonify({
@@ -205,11 +207,13 @@ def get_ocr_time():
     try:
         # 현재 g_ocr_time 값 조회
         current_ocr_time = g_ocr_time._value.get()
+        current_timestamp = time.time()
+        g_ocr_timestamp.set(current_timestamp)
         
         http_requests_total.labels(method='GET', endpoint='/ocr', status='200').inc()
         return jsonify({
             'time': current_ocr_time,
-            'timestamp': time.time()
+            'timestamp': current_timestamp
         }), 200
         
     except Exception as e:
@@ -234,4 +238,4 @@ if __name__ == '__main__':
     Timer(0.5, open_browser).start()
     
     # 서버 시작
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=5000, debug=True)

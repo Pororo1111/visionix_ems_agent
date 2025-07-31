@@ -129,6 +129,9 @@
                 <button class="submit-button" onclick="updateOCR()">
                     랜덤 시간 업데이트
                 </button>
+                <button class="submit-button" onclick="updateOCRWithCurrentTime()">
+                    현재 시간으로 업데이트
+                </button>
             </div>
             <button class="refresh-button" onclick="refreshOCR()">
                 OCR 시간 새로고침
@@ -305,6 +308,40 @@ if response.ok:
                         document.getElementById("ocr-success").textContent =
                             "OCR 시간이 성공적으로 업데이트되었습니다.";
                         // 0.5초 후에 성공 메시지 삭제
+                        setTimeout(() => {
+                            document.getElementById("ocr-success").textContent = "";
+                        }, 500);
+                    } else {
+                        document.getElementById("ocr-error").textContent =
+                            data.error || "오류가 발생했습니다.";
+                    }
+                } catch (error) {
+                    document.getElementById("ocr-error").textContent =
+                        "OCR 시간 업데이트 중 오류가 발생했습니다.";
+                }
+            }
+
+            async function updateOCRWithCurrentTime() {
+                const now = new Date();
+                const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}`;
+
+                try {
+                    const response = await fetch("/ocr", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ time: currentTime }),
+                    });
+
+                    const data = await response.json();
+                    clearMessages("ocr");
+
+                    if (response.ok) {
+                        document.getElementById("ocr-value").textContent =
+                            formatTimestamp(data.time);
+                        document.getElementById("ocr-success").textContent =
+                            "OCR 시간이 성공적으로 업데이트되었습니다.";
                         setTimeout(() => {
                             document.getElementById("ocr-success").textContent = "";
                         }, 500);
