@@ -62,13 +62,9 @@ def parse_time_string(time_str):
         return None
 
 def collect_system_metrics():
-    # 1분 평균 CPU 사용률(%)
-    try:
-        load1, _, _ = psutil.getloadavg()
-        cpu_count = psutil.cpu_count() or 1
-        g_cpu.set((load1 / cpu_count) * 100)
-    except Exception:
-        pass
+    # 실시간 CPU 사용률(%)
+    cpu_percent = psutil.cpu_percent(interval=None)
+    g_cpu.set(cpu_percent)
     
     # 메모리 사용률 업데이트
     mem = psutil.virtual_memory()
