@@ -96,17 +96,26 @@
         <h1>Visionix Device WebServer</h1>
 
         <div class="api-section">
-            <h3>시스템 상태</h3>
+            <h3>카메라 상태</h3>
             <div class="value-display">
                 <span class="value-label">현재 상태:</span>
                 <span id="status-value">로딩 중...</span>
             </div>
             <div class="input-group">
                 <label class="radio-label">
-                    <input type="radio" name="status" value="1" /> 정상
+                    <input type="radio" name="status" value="0" /> 정상
                 </label>
                 <label class="radio-label">
-                    <input type="radio" name="status" value="0" /> 실패
+                    <input type="radio" name="status" value="1" /> 시계멈춤
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="status" value="2" /> 신호없음
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="status" value="3" /> 패널손상
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="status" value="4" /> 기타이상감지
                 </label>
                 <button class="submit-button" onclick="updateStatus()">
                     상태 업데이트
@@ -119,26 +128,6 @@
             <div id="status-success" class="success"></div>
         </div>
 
-        <div class="api-section">
-            <h3>OCR 시간</h3>
-            <div class="value-display">
-                <span class="value-label">현재 OCR 시간:</span>
-                <span id="ocr-value">로딩 중...</span>
-            </div>
-            <div class="input-group">
-                <button class="submit-button" onclick="updateOCR()">
-                    랜덤 시간 업데이트
-                </button>
-                <button class="submit-button" onclick="updateOCRWithCurrentTime()">
-                    현재 시간으로 업데이트
-                </button>
-            </div>
-            <button class="refresh-button" onclick="refreshOCR()">
-                OCR 시간 새로고침
-            </button>
-            <div id="ocr-error" class="error"></div>
-            <div id="ocr-success" class="success"></div>
-        </div>
 
         <div class="api-section">
             <h3>시스템 메트릭</h3>
@@ -148,52 +137,7 @@
             </p>
         </div>
 
-        <div class="api-section">
-            <h3>Status API 사용법:</h3>
-            <h4>Python 코드 예제:</h4>
-            <pre>
-import requests
 
-# 상태 조회
-response = requests.get('http://localhost:5000/status')
-if response.ok:
-    data = response.json()
-    print(f"현재 상태: {data['status']}")
-
-# 상태 업데이트 (1: 정상, 0: 실패)
-new_status = 1
-response = requests.post(
-    'http://localhost:5000/status',
-    json={'status': new_status}
-)
-if response.ok:
-    print('상태가 성공적으로 업데이트되었습니다.')</pre
-            >
-        </div>
-
-        <div class="api-section">
-            <h3>OCR API 사용법:</h3>
-            <h4>Python 코드 예제:</h4>
-            <pre>
-import requests
-from datetime import datetime
-
-# OCR 시간 조회
-response = requests.get('http://localhost:5000/ocr')
-if response.ok:
-    data = response.json()
-    timestamp = datetime.fromtimestamp(data['time'])
-    print(f"현재 OCR 시간: {timestamp.strftime('%H:%M:%S')}")
-
-# OCR 시간 업데이트 (시간 문자열 사용)
-response = requests.post(
-    'http://localhost:5000/ocr',
-    json={'time': '14:30:25'}
-)
-if response.ok:
-    print('OCR 시간이 성공적으로 업데이트되었습니다.')</pre
-            >
-        </div>
 
         <script>
             function formatTimestamp(timestamp) {
@@ -220,15 +164,6 @@ if response.ok:
                 }
             }
 
-            function generateRandomTime() {
-                const now = new Date();
-                const hour = now.getHours();
-                const minute = Math.floor(Math.random() * 60);
-                const second = Math.floor(Math.random() * 60);
-                return `${hour.toString().padStart(2, "0")}:${minute
-                    .toString()
-                    .padStart(2, "0")}:${second.toString().padStart(2, "0")}`;
-            }
 
             async function updateStatus() {
                 const selectedRadio = document.querySelector(
@@ -273,92 +208,12 @@ if response.ok:
                 }
             }
 
-            async function refreshOCR() {
-                const ocrValue = document.getElementById("ocr-value");
-                try {
-                    const response = await fetch("/ocr");
-                    const data = await response.json();
-                    ocrValue.textContent = formatTimestamp(data.time);
-                    clearMessages("ocr");
-                } catch (error) {
-                    document.getElementById("ocr-error").textContent =
-                        "OCR 시간을 가져오는 중 오류가 발생했습니다.";
-                }
-            }
 
-            async function updateOCR() {
-                const randomTime = generateRandomTime();
 
-                try {
-                    const response = await fetch("/ocr", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ time: randomTime }),
-                    });
-
-                    const data = await response.json();
-                    clearMessages("ocr");
-
-                    if (response.ok) {
-                        // 응답 받은 즉시 OCR 시간 업데이트
-                        document.getElementById("ocr-value").textContent =
-                            formatTimestamp(data.time);
-                        document.getElementById("ocr-success").textContent =
-                            "OCR 시간이 성공적으로 업데이트되었습니다.";
-                        // 0.5초 후에 성공 메시지 삭제
-                        setTimeout(() => {
-                            document.getElementById("ocr-success").textContent = "";
-                        }, 500);
-                    } else {
-                        document.getElementById("ocr-error").textContent =
-                            data.error || "오류가 발생했습니다.";
-                    }
-                } catch (error) {
-                    document.getElementById("ocr-error").textContent =
-                        "OCR 시간 업데이트 중 오류가 발생했습니다.";
-                }
-            }
-
-            async function updateOCRWithCurrentTime() {
-                const now = new Date();
-                const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}`;
-
-                try {
-                    const response = await fetch("/ocr", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ time: currentTime }),
-                    });
-
-                    const data = await response.json();
-                    clearMessages("ocr");
-
-                    if (response.ok) {
-                        document.getElementById("ocr-value").textContent =
-                            formatTimestamp(data.time);
-                        document.getElementById("ocr-success").textContent =
-                            "OCR 시간이 성공적으로 업데이트되었습니다.";
-                        setTimeout(() => {
-                            document.getElementById("ocr-success").textContent = "";
-                        }, 500);
-                    } else {
-                        document.getElementById("ocr-error").textContent =
-                            data.error || "오류가 발생했습니다.";
-                    }
-                } catch (error) {
-                    document.getElementById("ocr-error").textContent =
-                        "OCR 시간 업데이트 중 오류가 발생했습니다.";
-                }
-            }
 
             // 페이지 로드 시 초기 데이터 가져오기
             window.onload = function () {
                 refreshStatus();
-                refreshOCR();
             };
         </script>
     </body>

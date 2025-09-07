@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+README.md
+CLAUDE.md
+.env
+.vscode/
+.idea/
+*.log
+run.sh
+grafana_dashboard.json
