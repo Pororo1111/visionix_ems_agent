@@ -465,5 +465,313 @@
                 }
             };
         </script>
+        
+        <div class="api-section">
+            <h3>복붙용: 각 서버 GET 연동 예시</h3>
+            <p>
+                각 라즈베리 파이 검사 서버(CAMERA/HDMI/OCR/AC/DC)에서 Visionix EMS로 상태를 푸시할 때, 아래 예시를 그대로 복붙해 사용하세요.
+                모든 값은 <code>GET /status/update</code>로 쿼리스트링 형태로 전달합니다. 호스트와 포트는 환경에 맞게 변경하십시오.
+            </p>
+            <div class="value-display" style="white-space: pre; overflow:auto;">
+<code># ================================
+# 공통: EMS 주소 설정
+# ================================
+# 예) EMS_BASE=http://127.0.0.1:8000   또는   http://ems.local:8000
+
+# ================================
+# 포트 배정 (각 서버 고정 포트)
+# ================================
+# - CAMERA 서버: 5001
+# - HDMI   서버: 5002
+# - OCR    서버: 5003
+# - AC     서버: 5004
+# - DC     서버: 5005
+# 예시(동일 호스트에서 각 서버가 자신 포트로 서비스하는 경우):
+#   http://<host>:5001/status/update?camera_value=2
+#   http://<host>:5002/status/update?hdmi_value=1
+#   http://<host>:5003/status/update?ocr_value=12:34:56
+#   http://<host>:5004/status/update?ac_value=0
+#   http://<host>:5005/status/update?dc_value=1
+
+# ================================
+# 1) cURL (쉘) 예시
+# ================================
+# CAMERA 서버에서: 카메라 상태 0~4 정수
+curl -G "${EMS_BASE}/status/update" --data-urlencode "camera_value=2"
+
+# HDMI 서버에서: HDMI 상태 0~3 정수
+curl -G "${EMS_BASE}/status/update" --data-urlencode "hdmi_value=1"
+
+# OCR 서버에서: HH:MM:SS 또는 0~86399 (초)
+curl -G "${EMS_BASE}/status/update" --data-urlencode "ocr_value=12:34:56"
+# 또는
+curl -G "${EMS_BASE}/status/update" --data-urlencode "ocr_value=45296"
+
+# AC 서버에서: 0(정상) / 1(비정상)
+curl -G "${EMS_BASE}/status/update" --data-urlencode "ac_value=0"
+
+# DC 서버에서: 0(정상) / 1(비정상)
+curl -G "${EMS_BASE}/status/update" --data-urlencode "dc_value=1"
+
+
+# ================================
+# 2) Python (requests) 예시
+# ================================
+import os, requests
+EMS_BASE = os.getenv("EMS_BASE", "http://127.0.0.1:8000")
+
+def push_camera(value:int):
+    requests.get(f"{EMS_BASE}/status/update", params={"camera_value": value}, timeout=3)
+
+def push_hdmi(value:int):
+    requests.get(f"{EMS_BASE}/status/update", params={"hdmi_value": value}, timeout=3)
+
+def push_ocr_hms(hms:str):
+    # 예: "12:34:56"
+    requests.get(f"{EMS_BASE}/status/update", params={"ocr_value": hms}, timeout=3)
+
+def push_ocr_seconds(seconds:int):
+    # 예: 0~86399
+    requests.get(f"{EMS_BASE}/status/update", params={"ocr_value": seconds}, timeout=3)
+
+def push_ac(value:int):
+    requests.get(f"{EMS_BASE}/status/update", params={"ac_value": value}, timeout=3)
+
+def push_dc(value:int):
+    requests.get(f"{EMS_BASE}/status/update", params={"dc_value": value}, timeout=3)
+
+
+# ================================
+# 3) Node.js (fetch) 예시
+# ================================
+// const EMS_BASE = process.env.EMS_BASE || "http://127.0.0.1:8000";
+// await fetch(`${EMS_BASE}/status/update?camera_value=2`);
+// await fetch(`${EMS_BASE}/status/update?hdmi_value=1`);
+// await fetch(`${EMS_BASE}/status/update?ocr_value=12:34:56`);
+// await fetch(`${EMS_BASE}/status/update?ac_value=0`);
+// await fetch(`${EMS_BASE}/status/update?dc_value=1`);
+
+
+# ================================
+# 4) 5초 주기 폴링: 에이전트가 각 서버를 GET 후 EMS로 갱신
+# ================================
+# 에이전트(현재 프로젝트)가 각 서버에서 값을 읽어 EMS에 반영하는 패턴입니다.
+# 아래는 기준 엔드포인트 가정입니다. 필요 시 각 서버 구현과 맞춰 수정하세요.
+# - CAMERA: http://<host>:5001/status        -> {"camera_value": int}
+# - HDMI  : http://<host>:5002/status        -> {"hdmi_value": int}
+# - OCR   : http://<host>:5003/status        -> {"ocr_value": "HH:MM:SS" 또는 초(int)}
+# - AC    : http://<host>:5004/status        -> {"ac_value": int}
+# - DC    : http://<host>:5005/status        -> {"dc_value": int}
+
+# 4-1) Bash(curl) 간단 루프 예시
+EMS_BASE=http://127.0.0.1:8000
+HOST=127.0.0.1
+while true; do
+  cam=$(curl -fsS http://$HOST:5001/status | jq -r '.camera_value')
+  hdmi=$(curl -fsS http://$HOST:5002/status | jq -r '.hdmi_value')
+  ocr=$(curl -fsS http://$HOST:5003/status | jq -r '.ocr_value')
+  ac=$(curl -fsS http://$HOST:5004/status | jq -r '.ac_value')
+  dc=$(curl -fsS http://$HOST:5005/status | jq -r '.dc_value')
+  curl -fsS -G "$EMS_BASE/status/update" --data-urlencode "camera_value=$cam"
+  curl -fsS -G "$EMS_BASE/status/update" --data-urlencode "hdmi_value=$hdmi"
+  curl -fsS -G "$EMS_BASE/status/update" --data-urlencode "ocr_value=$ocr"
+  curl -fsS -G "$EMS_BASE/status/update" --data-urlencode "ac_value=$ac"
+  curl -fsS -G "$EMS_BASE/status/update" --data-urlencode "dc_value=$dc"
+  sleep 5
+done
+
+# 4-2) Python 폴링 예시
+import os, time, requests
+EMS_BASE = os.getenv("EMS_BASE", "http://127.0.0.1:8000")
+HOST = os.getenv("DEVICE_HOST", "127.0.0.1")
+
+def get_json(url: str):
+    return requests.get(url, timeout=3).json()
+
+while True:
+    cam = get_json(f"http://{HOST}:5001/status").get("camera_value")
+    hdmi = get_json(f"http://{HOST}:5002/status").get("hdmi_value")
+    ocr = get_json(f"http://{HOST}:5003/status").get("ocr_value")
+    ac = get_json(f"http://{HOST}:5004/status").get("ac_value")
+    dc = get_json(f"http://{HOST}:5005/status").get("dc_value")
+
+    if cam is not None:
+        requests.get(f"{EMS_BASE}/status/update", params={"camera_value": cam}, timeout=3)
+    if hdmi is not None:
+        requests.get(f"{EMS_BASE}/status/update", params={"hdmi_value": hdmi}, timeout=3)
+    if ocr is not None:
+        requests.get(f"{EMS_BASE}/status/update", params={"ocr_value": ocr}, timeout=3)
+    if ac is not None:
+        requests.get(f"{EMS_BASE}/status/update", params={"ac_value": ac}, timeout=3)
+    if dc is not None:
+        requests.get(f"{EMS_BASE}/status/update", params={"dc_value": dc}, timeout=3)
+
+    time.sleep(5)
+
+# 4-3) Node.js 폴링 예시
+/*
+const EMS_BASE = process.env.EMS_BASE || 'http://127.0.0.1:8000';
+const HOST = process.env.DEVICE_HOST || '127.0.0.1';
+
+async function j(url) { const r = await fetch(url); return r.json(); }
+
+async function pollOnce() {
+  const cam = (await j(`http://${HOST}:5001/status`)).camera_value;
+  const hdmi = (await j(`http://${HOST}:5002/status`)).hdmi_value;
+  const ocr = (await j(`http://${HOST}:5003/status`)).ocr_value;
+  const ac = (await j(`http://${HOST}:5004/status`)).ac_value;
+  const dc = (await j(`http://${HOST}:5005/status`)).dc_value;
+  if (cam !== undefined) await fetch(`${EMS_BASE}/status/update?camera_value=${cam}`);
+  if (hdmi !== undefined) await fetch(`${EMS_BASE}/status/update?hdmi_value=${hdmi}`);
+  if (ocr !== undefined) await fetch(`${EMS_BASE}/status/update?ocr_value=${encodeURIComponent(ocr)}`);
+  if (ac !== undefined) await fetch(`${EMS_BASE}/status/update?ac_value=${ac}`);
+  if (dc !== undefined) await fetch(`${EMS_BASE}/status/update?dc_value=${dc}`);
+}
+setInterval(pollOnce, 5000);
+*/
+
+# ================================
+# 유의사항 (가이드와 동일)
+# ================================
+# - OCR 값은 0~86399 범위의 초 또는 "HH:MM:SS" 문자열만 허용됩니다.
+# - EMS는 내부적으로 OCR을 초 단위 정수로 저장하며, Info 메트릭으로 원문 문자열도 노출합니다.
+# - 메트릭 키: camera_value, ocr_value_seconds, hdmi_value, ac_value, dc_value
+# - 상태 스냅샷 확인: GET /status
+# - Prometheus 메트릭: GET /metrics
+</code>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h3>복붙용: 각 서버 Flask 구현/실행 가이드</h3>
+            <p>
+                각 장비 서버(CAMERA/HDMI/OCR/AC/DC)는 Flask로 구동합니다. 아래 명령과 예제 코드를 그대로 복붙해 사용하세요.
+                포트는 고정: CAMERA 5001, HDMI 5002, OCR 5003, AC 5004, DC 5005.
+            </p>
+            <div class="value-display" style="white-space: pre; overflow:auto;">
+<code># 공통: Flask 설치 (Python 3)
+python -m pip install --upgrade pip
+python -m pip install flask
+
+# =========================================
+# CAMERA 서버 (포트 5001)
+# 파일명: camera_server.py
+# =========================================
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+state = {"camera_value": 0}  # 0~4
+
+@app.get("/status")
+def get_status():
+    return jsonify(state)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001)
+
+# 실행: python camera_server.py
+
+
+# =========================================
+# HDMI 서버 (포트 5002)
+# 파일명: hdmi_server.py
+# =========================================
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+state = {"hdmi_value": 0}  # 0~3
+
+@app.get("/status")
+def get_status():
+    return jsonify(state)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5002)
+
+# 실행: python hdmi_server.py
+
+
+# =========================================
+# OCR 서버 (포트 5003)
+# 파일명: ocr_server.py
+# =========================================
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+def hms_to_seconds(hms: str) -> int | None:
+    try:
+        parts = hms.split(":")
+        if len(parts) != 3:
+            return None
+        h, m, s = map(int, parts)
+        if not (0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59):
+            return None
+        return h * 3600 + m * 60 + s
+    except Exception:
+        return None
+
+def seconds_to_hms(sec: int) -> str:
+    sec = max(0, min(86399, int(sec)))
+    h = sec // 3600
+    m = (sec % 3600) // 60
+    s = sec % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+state_seconds = 0  # 내부는 초(0~86399)로 저장
+
+@app.get("/status")
+def get_status():
+    # ocr_value는 문자열(HH:MM:SS)로 반환, 필요시 초도 함께 노출
+    return jsonify({
+        "ocr_value": seconds_to_hms(state_seconds),
+        "ocr_value_seconds": state_seconds,
+    })
+    
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5003)
+
+# 실행: python ocr_server.py
+
+
+# =========================================
+# AC 서버 (포트 5004)
+# 파일명: ac_server.py
+# =========================================
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+state = {"ac_value": 0}  # 0 정상, 1 비정상
+
+@app.get("/status")
+def get_status():
+    return jsonify(state)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5004)
+
+# 실행: python ac_server.py
+
+
+# =========================================
+# DC 서버 (포트 5005)
+# 파일명: dc_server.py
+# =========================================
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+state = {"dc_value": 0}  # 0 정상, 1 비정상
+
+@app.get("/status")
+def get_status():
+    return jsonify(state)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5005)
+
+# 실행: python dc_server.py
+</code>
+            </div>
+        </div>
     </body>
 </html>

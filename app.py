@@ -13,6 +13,10 @@ from datetime import datetime, timedelta, timezone
 import threading
 import re
 import math
+import os
+import json
+from urllib import request as urlrequest
+from urllib.error import URLError, HTTPError
 
 app = Flask(__name__)
 
@@ -294,6 +298,86 @@ def update_status_via_get():
 def index():
     http_requests_total.labels(method='GET', endpoint='/', status='200').inc()
     return render_template('index.html')
+
+
+def _fetch_json(url: str, timeout: float = 3.0):
+    try:
+        with urlrequest.urlopen(url, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            data = resp.read().decode('utf-8')
+            return json.loads(data)
+    except (URLError, HTTPError, TimeoutError, json.JSONDecodeError):
+        return None
+
+
+def _poll_devices_loop():
+    host_default = os.getenv('DEVICE_HOST', '127.0.0.1')
+    hosts = {
+        'camera': os.getenv('CAMERA_HOST', host_default),
+        'hdmi': os.getenv('HDMI_HOST', host_default),
+        'ocr': os.getenv('OCR_HOST', host_default),
+        'ac': os.getenv('AC_HOST', host_default),
+        'dc': os.getenv('DC_HOST', host_default),
+    }
+    ports = {
+        'camera': int(os.getenv('CAMERA_PORT', '5001')),
+        'hdmi': int(os.getenv('HDMI_PORT', '5002')),
+        'ocr': int(os.getenv('OCR_PORT', '5003')),
+        'ac': int(os.getenv('AC_PORT', '5004')),
+        'dc': int(os.getenv('DC_PORT', '5005')),
+    }
+
+    while True:
+        try:
+            payload = {}
+            cam = _fetch_json(f"http://{hosts['camera']}:{ports['camera']}/status")
+            if cam and 'camera_value' in cam:
+                payload['camera_value'] = cam['camera_value']
+
+            hdmi = _fetch_json(f"http://{hosts['hdmi']}:{ports['hdmi']}/status")
+            if hdmi and 'hdmi_value' in hdmi:
+                payload['hdmi_value'] = hdmi['hdmi_value']
+
+            ocr = _fetch_json(f"http://{hosts['ocr']}:{ports['ocr']}/status")
+            if ocr and 'ocr_value' in ocr:
+                payload['ocr_value'] = ocr['ocr_value']
+
+            ac = _fetch_json(f"http://{hosts['ac']}:{ports['ac']}/status")
+            if ac and 'ac_value' in ac:
+                payload['ac_value'] = ac['ac_value']
+
+            dc = _fetch_json(f"http://{hosts['dc']}:{ports['dc']}/status")
+            if dc and 'dc_value' in dc:
+                payload['dc_value'] = dc['dc_value']
+
+            if payload:
+                try:
+                    _apply_updates(payload)
+                except ValueError:
+                    pass
+        except Exception:
+            # 폴링 루프의 예기치 못한 예외는 무시하고 다음 주기로 진행
+            pass
+
+        time.sleep(5)
+
+
+_poller_started = False
+_poller_lock = threading.Lock()
+
+def _start_poller_thread_once():
+    global _poller_started
+    with _poller_lock:
+        if _poller_started:
+            return
+        t = threading.Thread(target=_poll_devices_loop, name='device-poller', daemon=True)
+        t.start()
+        _poller_started = True
+
+@app.before_request
+def _ensure_poller_started():
+    _start_poller_thread_once()
 
 
 if __name__ == '__main__':
