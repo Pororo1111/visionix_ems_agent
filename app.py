@@ -1,19 +1,44 @@
 from flask import Flask, Response, request, jsonify, render_template
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Gauge, Counter, Histogram
+from prometheus_client import (
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+    Gauge,
+    Counter,
+    Histogram,
+    Info,
+)
 import psutil
 import time
-import os
+import threading
+import re
+import math
 
 app = Flask(__name__)
 
+# 상태 값 기본 설정
+DEFAULT_STATUS = {
+    'camera_value': 0,
+    'ocr_value': 0,
+    'hdmi_value': 0,
+    'ac_value': 0,
+    'dc_value': 0,
+}
+_status_state = DEFAULT_STATUS.copy()
+_status_lock = threading.Lock()
+
 # 시스템 메트릭 Gauge들
-g_status = Gauge('camera_value', 'Camera status value')
+g_camera_value = Gauge('camera_value', 'Camera status value')
+g_ocr_seconds = Gauge('ocr_value_seconds', 'OCR timestamp converted to seconds')
+info_ocr_value = Info('ocr_value', 'OCR timestamp value as HH:MM:SS string')
+g_hdmi_value = Gauge('hdmi_value', 'HDMI status value')
+g_ac_value = Gauge('ac_value', 'AC power status value')
+g_dc_value = Gauge('dc_value', 'DC power status value')
+
 g_cpu = Gauge('system_cpu_percent', 'System CPU usage percent')
 g_mem = Gauge('system_memory_percent', 'System memory usage percent')
 g_mem_available = Gauge('system_memory_available_bytes', 'Available memory in bytes')
 g_mem_total = Gauge('system_memory_total_bytes', 'Total memory in bytes')
 g_mem_used = Gauge('system_memory_used_bytes', 'Used memory in bytes')
-
 
 # 디스크 메트릭
 g_disk_usage = Gauge('system_disk_usage_percent', 'Disk usage percent', ['device', 'mountpoint'])
@@ -38,19 +63,107 @@ http_requests_total = Counter('http_requests_total', 'Total HTTP requests', ['me
 http_request_duration = Histogram('http_request_duration_seconds', 'HTTP request duration in seconds')
 
 
+OCR_PATTERN = re.compile(r'^\d{1,2}:\d{2}:\d{2}$')
+
+
+def _hms_to_seconds(value: str) -> int:
+    hours, minutes, seconds = value.split(':')
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+
+
+def _seconds_to_hms(value: int) -> str:
+    seconds = max(0, int(value))
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    remaining = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{remaining:02d}"
+
+
+def _update_metric(field: str, value):
+    if field == 'camera_value':
+        g_camera_value.set(value)
+    elif field == 'ocr_value':
+        info_ocr_value.info({'value': _seconds_to_hms(value)})
+        g_ocr_seconds.set(value)
+    elif field == 'hdmi_value':
+        g_hdmi_value.set(value)
+    elif field == 'ac_value':
+        g_ac_value.set(value)
+    elif field == 'dc_value':
+        g_dc_value.set(value)
+
+
+def _set_status(field: str, value):
+    with _status_lock:
+        _status_state[field] = value
+    _update_metric(field, value)
+
+
+def _get_status_snapshot():
+    with _status_lock:
+        return dict(_status_state)
+
+
+def _validate_and_cast(field: str, raw_value):
+    if field == 'ocr_value':
+        if isinstance(raw_value, str):
+            if not OCR_PATTERN.match(raw_value):
+                raise ValueError('ocr_value must follow HH:MM:SS format')
+            value = _hms_to_seconds(raw_value)
+        elif isinstance(raw_value, (int, float)):
+            if not math.isfinite(raw_value):
+                raise ValueError('ocr_value must be a finite number or HH:MM:SS string')
+            value = int(raw_value)
+        else:
+            raise ValueError('ocr_value must be a HH:MM:SS string or number of seconds')
+        if value < 0:
+            raise ValueError('ocr_value must be zero or positive')
+        if value >= 24 * 3600:
+            raise ValueError('ocr_value must be less than 86400 seconds (24 hours)')
+        return value
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'{field} must be an integer') from exc
+
+    if field == 'camera_value':
+        if value < 0:
+            raise ValueError('camera_value must be zero or positive')
+        return value
+    if field == 'hdmi_value':
+        if value not in {0, 1, 2, 3}:
+            raise ValueError('hdmi_value must be one of 0, 1, 2, 3')
+        return value
+    if field in {'ac_value', 'dc_value'}:
+        if value not in {0, 1}:
+            raise ValueError(f'{field} must be either 0 or 1')
+        return value
+    raise ValueError(f'Unsupported field: {field}')
+
+
+def _apply_updates(data: dict):
+    updated_fields = {}
+    for key in DEFAULT_STATUS:
+        if key in data:
+            value = _validate_and_cast(key, data[key])
+            _set_status(key, value)
+            updated_fields[key] = value
+    if not updated_fields:
+        raise ValueError('No valid fields provided for update')
+    return updated_fields
+
+
 def collect_system_metrics():
-    # 실시간 CPU 사용률(%)
     cpu_percent = psutil.cpu_percent(interval=None)
     g_cpu.set(cpu_percent)
-    
-    # 메모리 사용률 업데이트
+
     mem = psutil.virtual_memory()
     g_mem.set(mem.percent)
     g_mem_available.set(mem.available)
     g_mem_total.set(mem.total)
     g_mem_used.set(mem.used)
-    
-    # 디스크 메트릭 수집
+
     for partition in psutil.disk_partitions():
         try:
             usage = psutil.disk_usage(partition.mountpoint)
@@ -59,99 +172,108 @@ def collect_system_metrics():
             g_disk_total.labels(device=partition.device, mountpoint=partition.mountpoint).set(usage.total)
         except (PermissionError, FileNotFoundError):
             continue
-    
-    # 네트워크 메트릭 수집
+
     net_io = psutil.net_io_counters(pernic=True)
     for interface, stats in net_io.items():
         g_network_bytes_sent.labels(interface=interface).set(stats.bytes_sent)
         g_network_bytes_recv.labels(interface=interface).set(stats.bytes_recv)
         g_network_packets_sent.labels(interface=interface).set(stats.packets_sent)
         g_network_packets_recv.labels(interface=interface).set(stats.packets_recv)
-    
-    # 프로세스 및 스레드 수
+
     g_process_count.set(len(psutil.pids()))
     g_thread_count.set(psutil.cpu_count() or 0)
-    
-    # 부팅 시간
     g_boot_time.set(psutil.boot_time())
+
+
+def _initialize_metrics():
+    snapshot = _get_status_snapshot()
+    for key, value in snapshot.items():
+        _update_metric(key, value)
+
+
+_initialize_metrics()
+
 
 @app.route('/metrics')
 @http_request_duration.time()
 def metrics():
-    # 시스템 메트릭 수집
     collect_system_metrics()
-    
-    # HTTP 요청 카운터 증가
     http_requests_total.labels(method='GET', endpoint='/metrics', status='200').inc()
-    
     data = generate_latest()
     return Response(data, mimetype=CONTENT_TYPE_LATEST)
+
 
 @app.route('/status', methods=['POST'])
 @http_request_duration.time()
 def update_status():
     try:
-        data = request.get_json()
-        if not data or 'status' not in data:
-            http_requests_total.labels(method='POST', endpoint='/status', status='400').inc()
-            return jsonify({'error': 'status 값이 필요합니다'}), 400
-        
-        status_value = data['status']
-        
-        # status 값이 숫자인지 확인
-        if not isinstance(status_value, (int, float)):
-            http_requests_total.labels(method='POST', endpoint='/status', status='400').inc()
-            return jsonify({'error': 'status 값은 숫자여야 합니다'}), 400
-        
-        # g_status 값 업데이트
-        g_status.set(status_value)
-        
+        data = request.get_json(force=True, silent=True) or {}
+        if 'status' in data and 'camera_value' not in data:
+            data['camera_value'] = data['status']
+        updated_fields = _apply_updates(data)
+        response = {
+            'status': _get_status_snapshot(),
+            'updated_fields': list(updated_fields.keys()),
+            'timestamp': time.time(),
+        }
         http_requests_total.labels(method='POST', endpoint='/status', status='200').inc()
-        return jsonify({
-            'message': 'Status updated successfully',
-            'status': status_value,
-            'timestamp': time.time()
-        }), 200
-        
-    except Exception as e:
+        return jsonify(response), 200
+    except ValueError as exc:
+        http_requests_total.labels(method='POST', endpoint='/status', status='400').inc()
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover
         http_requests_total.labels(method='POST', endpoint='/status', status='500').inc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(exc)}), 500
+
 
 @app.route('/status', methods=['GET'])
 @http_request_duration.time()
 def get_status():
     try:
-        # 현재 g_status 값 조회
-        current_status = g_status._value.get()
-        
         http_requests_total.labels(method='GET', endpoint='/status', status='200').inc()
         return jsonify({
-            'status': current_status,
-            'timestamp': time.time()
+            'status': _get_status_snapshot(),
+            'timestamp': time.time(),
         }), 200
-        
-    except Exception as e:
+    except Exception as exc:  # pragma: no cover
         http_requests_total.labels(method='GET', endpoint='/status', status='500').inc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(exc)}), 500
 
+
+@app.route('/status/update', methods=['GET'])
+@http_request_duration.time()
+def update_status_via_get():
+    try:
+        query_params = request.args.to_dict()
+        updated_fields = _apply_updates(query_params)
+        response = {
+            'status': _get_status_snapshot(),
+            'updated_fields': list(updated_fields.keys()),
+            'timestamp': time.time(),
+        }
+        http_requests_total.labels(method='GET', endpoint='/status/update', status='200').inc()
+        return jsonify(response), 200
+    except ValueError as exc:
+        http_requests_total.labels(method='GET', endpoint='/status/update', status='400').inc()
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover
+        http_requests_total.labels(method='GET', endpoint='/status/update', status='500').inc()
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/')
 @http_request_duration.time()
 def index():
-    # 기본 페이지
     http_requests_total.labels(method='GET', endpoint='/', status='200').inc()
     return render_template('index.html')
+
 
 if __name__ == '__main__':
     import webbrowser
     from threading import Timer
-    
+
     def open_browser():
         webbrowser.open('http://localhost:5000')
-    
-    # 서버가 시작된 후 0.5초 후에 브라우저 열기
+
     Timer(0.5, open_browser).start()
-    
-    # 서버 시작
     app.run(host='0.0.0.0', port=5000, debug=True)

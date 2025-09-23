@@ -7,7 +7,7 @@
         <style>
             body {
                 font-family: Arial, sans-serif;
-                max-width: 800px;
+                max-width: 900px;
                 margin: 0 auto;
                 padding: 20px;
             }
@@ -16,9 +16,6 @@
                 padding: 15px;
                 border: 1px solid #ddd;
                 border-radius: 5px;
-            }
-            .indented {
-                margin-left: 20px;
             }
             .value-display {
                 background-color: #f5f5f5;
@@ -49,6 +46,7 @@
             .input-group {
                 margin: 10px 0;
                 display: flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 10px;
             }
@@ -79,17 +77,6 @@
             .radio-label input[type="radio"] {
                 margin-right: 5px;
             }
-            pre {
-                background-color: #f5f5f5;
-                padding: 15px;
-                border-radius: 4px;
-                overflow-x: auto;
-                font-family: "Consolas", monospace;
-                margin: 10px 0;
-            }
-            code {
-                font-family: "Consolas", monospace;
-            }
         </style>
     </head>
     <body>
@@ -99,35 +86,125 @@
             <h3>카메라 상태</h3>
             <div class="value-display">
                 <span class="value-label">현재 상태:</span>
-                <span id="status-value">로딩 중...</span>
+                <span id="camera-value">로딩 중...</span>
             </div>
             <div class="input-group">
                 <label class="radio-label">
-                    <input type="radio" name="status" value="0" /> 정상
+                    <input type="radio" name="camera" value="0" /> 정상
                 </label>
                 <label class="radio-label">
-                    <input type="radio" name="status" value="1" /> 시계멈춤
+                    <input type="radio" name="camera" value="1" /> 시계멈춤
                 </label>
                 <label class="radio-label">
-                    <input type="radio" name="status" value="2" /> 신호없음
+                    <input type="radio" name="camera" value="2" /> 신호없음
                 </label>
                 <label class="radio-label">
-                    <input type="radio" name="status" value="3" /> 패널손상
+                    <input type="radio" name="camera" value="3" /> 패널손상
                 </label>
                 <label class="radio-label">
-                    <input type="radio" name="status" value="4" /> 기타이상감지
+                    <input type="radio" name="camera" value="4" /> 기타이상감지
                 </label>
-                <button class="submit-button" onclick="updateStatus()">
+                <button class="submit-button" onclick="updateCamera()">
                     상태 업데이트
                 </button>
             </div>
-            <button class="refresh-button" onclick="refreshStatus()">
-                상태 새로고침
-            </button>
-            <div id="status-error" class="error"></div>
-            <div id="status-success" class="success"></div>
+            <div id="camera-error" class="error"></div>
+            <div id="camera-success" class="success"></div>
         </div>
 
+        <div class="api-section">
+            <h3>OCR 시간 값</h3>
+            <div class="value-display">
+                <span class="value-label">현재 OCR:</span>
+                <span id="ocr-value">로딩 중...</span>
+            </div>
+            <div class="input-group">
+                <input
+                    id="ocr-input"
+                    class="input-field"
+                    type="time"
+                    step="1"
+                    placeholder="HH:MM:SS"
+                />
+                <button class="submit-button" onclick="updateOCR()">
+                    OCR 업데이트
+                </button>
+                <button class="submit-button" onclick="setOCRToCurrentTime()">
+                    현재 시간으로
+                </button>
+                <button class="submit-button" onclick="setOCRToRandomTime()">
+                    랜덤 시간으로
+                </button>
+            </div>
+            <div id="ocr-error" class="error"></div>
+            <div id="ocr-success" class="success"></div>
+        </div>
+
+        <div class="api-section">
+            <h3>HDMI 상태</h3>
+            <div class="value-display">
+                <span class="value-label">현재 HDMI:</span>
+                <span id="hdmi-value">로딩 중...</span>
+            </div>
+            <div class="input-group">
+                <label class="radio-label">
+                    <input type="radio" name="hdmi" value="0" /> 정상
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="hdmi" value="1" /> 시계멈춤
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="hdmi" value="2" /> 신호없음
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="hdmi" value="3" /> 기타 이상
+                </label>
+                <button class="submit-button" onclick="updateHDMI()">
+                    HDMI 업데이트
+                </button>
+            </div>
+            <div id="hdmi-error" class="error"></div>
+            <div id="hdmi-success" class="success"></div>
+        </div>
+
+        <div class="api-section">
+            <h3>전원 상태</h3>
+            <div class="value-display">
+                <span class="value-label">AC:</span>
+                <span id="ac-value">로딩 중...</span>
+            </div>
+            <div class="input-group">
+                <label class="radio-label">
+                    <input type="radio" name="ac" value="0" /> 정상
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="ac" value="1" /> 비정상
+                </label>
+                <button class="submit-button" onclick="updateAC()">
+                    AC 업데이트
+                </button>
+            </div>
+            <div id="ac-error" class="error"></div>
+            <div id="ac-success" class="success"></div>
+
+            <div class="value-display">
+                <span class="value-label">DC:</span>
+                <span id="dc-value">로딩 중...</span>
+            </div>
+            <div class="input-group">
+                <label class="radio-label">
+                    <input type="radio" name="dc" value="0" /> 정상
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="dc" value="1" /> 비정상
+                </label>
+                <button class="submit-button" onclick="updateDC()">
+                    DC 업데이트
+                </button>
+            </div>
+            <div id="dc-error" class="error"></div>
+            <div id="dc-success" class="success"></div>
+        </div>
 
         <div class="api-section">
             <h3>시스템 메트릭</h3>
@@ -135,85 +212,248 @@
                 전체 시스템 메트릭을 확인하려면
                 <a href="/metrics" target="_blank">/metrics</a>를 방문하세요.
             </p>
+            <button class="refresh-button" onclick="refreshStatus()">
+                전체 상태 새로고침
+            </button>
         </div>
 
-
-
         <script>
-            function formatTimestamp(timestamp) {
-                if (!timestamp) return "-";
-                const date = new Date(timestamp * 1000);
-                return date.toLocaleTimeString("ko-KR");
+            function clearMessages(prefix) {
+                const errorEl = document.getElementById(`${prefix}-error`);
+                const successEl = document.getElementById(`${prefix}-success`);
+                if (errorEl) errorEl.textContent = '';
+                if (successEl) successEl.textContent = '';
             }
 
-            function clearMessages(prefix) {
-                document.getElementById(prefix + "-error").textContent = "";
-                document.getElementById(prefix + "-success").textContent = "";
+            function setRadioValue(name, value) {
+                const radios = document.querySelectorAll(`input[name="${name}"]`);
+                radios.forEach((radio) => {
+                    radio.checked = radio.value === String(value);
+                });
+            }
+
+            function padTimeSegment(value) {
+                return String(value).padStart(2, '0');
+            }
+
+            function secondsToTimeString(totalSeconds) {
+                if (totalSeconds === null || totalSeconds === undefined) {
+                    return null;
+                }
+                const numeric = Number(totalSeconds);
+                if (!Number.isFinite(numeric)) {
+                    return null;
+                }
+                const seconds = Math.max(0, Math.floor(numeric));
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const remainder = seconds % 60;
+                if (hours > 23) {
+                    return null;
+                }
+                return `${padTimeSegment(hours)}:${padTimeSegment(minutes)}:${padTimeSegment(remainder)}`;
+            }
+
+            function normalizeTimeString(value) {
+                if (value === null || value === undefined || value === '') {
+                    return null;
+                }
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                    return secondsToTimeString(value);
+                }
+                const trimmed = String(value).trim();
+                if (!trimmed) {
+                    return null;
+                }
+                if (/^\d+$/.test(trimmed)) {
+                    return secondsToTimeString(Number(trimmed));
+                }
+                const parts = trimmed.split(':');
+                if (parts.length === 2) {
+                    parts.push('00');
+                }
+                if (parts.length !== 3) {
+                    return null;
+                }
+                const [hours, minutes, seconds] = parts.map((segment) => Number(segment));
+                if ([hours, minutes, seconds].some((segment) => Number.isNaN(segment))) {
+                    return null;
+                }
+                if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
+                    return null;
+                }
+                return `${padTimeSegment(hours)}:${padTimeSegment(minutes)}:${padTimeSegment(seconds)}`;
+            }
+
+            function setOCRInputValue(value) {
+                const input = document.getElementById('ocr-input');
+                if (!input) return null;
+                const normalized = normalizeTimeString(value);
+                input.value = normalized || '';
+                return normalized;
+            }
+
+            function setOCRToCurrentTime() {
+                const now = new Date();
+                const formatted = `${padTimeSegment(now.getHours())}:${padTimeSegment(now.getMinutes())}:${padTimeSegment(now.getSeconds())}`;
+                const value = setOCRInputValue(formatted);
+                if (value) {
+                    updateStatusField('ocr_value', value);
+                }
+            }
+
+            function setOCRToRandomTime() {
+                const randomHours = Math.floor(Math.random() * 24);
+                const randomMinutes = Math.floor(Math.random() * 60);
+                const randomSeconds = Math.floor(Math.random() * 60);
+                const formatted = `${padTimeSegment(randomHours)}:${padTimeSegment(randomMinutes)}:${padTimeSegment(randomSeconds)}`;
+                const value = setOCRInputValue(formatted);
+                if (value) {
+                    updateStatusField('ocr_value', value);
+                }
+            }
+
+            function updateOcrDisplay(value) {
+                const normalized = setOCRInputValue(value);
+                const display = normalized || '-';
+                const target = document.getElementById('ocr-value');
+                if (target) {
+                    target.textContent = display;
+                }
+                return normalized;
             }
 
             async function refreshStatus() {
-                const statusValue = document.getElementById("status-value");
                 try {
-                    const response = await fetch("/status");
+                    const response = await fetch('/status');
                     const data = await response.json();
-                    statusValue.textContent = data.status;
-                    clearMessages("status");
+                    if (!response.ok) {
+                        console.error(data.error || '상태를 가져오는 중 오류가 발생했습니다.');
+                        return;
+                    }
+
+                    const status = data.status || {};
+                    document.getElementById('camera-value').textContent = status.camera_value;
+                    updateOcrDisplay(status.ocr_value);
+                    document.getElementById('hdmi-value').textContent = status.hdmi_value;
+                    document.getElementById('ac-value').textContent = status.ac_value;
+                    document.getElementById('dc-value').textContent = status.dc_value;
+
+                    setRadioValue('camera', status.camera_value);
+                    setRadioValue('hdmi', status.hdmi_value);
+                    setRadioValue('ac', status.ac_value);
+                    setRadioValue('dc', status.dc_value);
                 } catch (error) {
-                    document.getElementById("status-error").textContent =
-                        "상태를 가져오는 중 오류가 발생했습니다.";
+                    console.error('상태를 가져오는 중 오류가 발생했습니다.', error);
                 }
             }
 
+            async function updateStatusField(field, value) {
+                clearMessages(field.replace('_value', ''));
+                try {
+                    const response = await fetch('/status', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ [field]: value }),
+                    });
+                    const data = await response.json();
 
-            async function updateStatus() {
-                const selectedRadio = document.querySelector(
-                    'input[name="status"]:checked'
-                );
-                if (!selectedRadio) {
-                    document.getElementById("status-error").textContent =
-                        "상태를 선택하세요.";
+                    if (!response.ok) {
+                        document.getElementById(`${field.replace('_value', '')}-error`).textContent =
+                            data.error || '오류가 발생했습니다.';
+                        return;
+                    }
+
+                    const status = data.status || {};
+                    document.getElementById('camera-value').textContent = status.camera_value;
+                    updateOcrDisplay(status.ocr_value);
+                    document.getElementById('hdmi-value').textContent = status.hdmi_value;
+                    document.getElementById('ac-value').textContent = status.ac_value;
+                    document.getElementById('dc-value').textContent = status.dc_value;
+
+                    setRadioValue('camera', status.camera_value);
+                    setRadioValue('hdmi', status.hdmi_value);
+                    setRadioValue('ac', status.ac_value);
+                    setRadioValue('dc', status.dc_value);
+
+                    document.getElementById(`${field.replace('_value', '')}-success`).textContent =
+                        '값이 성공적으로 업데이트되었습니다.';
+                    setTimeout(() => {
+                        const successEl = document.getElementById(`${field.replace('_value', '')}-success`);
+                        if (successEl) successEl.textContent = '';
+                    }, 800);
+                } catch (error) {
+                    document.getElementById(`${field.replace('_value', '')}-error`).textContent =
+                        '업데이트 중 오류가 발생했습니다.';
+                }
+            }
+
+            function updateCamera() {
+                clearMessages('camera');
+                const selected = document.querySelector('input[name="camera"]:checked');
+                if (!selected) {
+                    document.getElementById('camera-error').textContent = '상태를 선택하세요.';
                     return;
                 }
-
-                try {
-                    const response = await fetch("/status", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            status: Number(selectedRadio.value),
-                        }),
-                    });
-
-                    const data = await response.json();
-
-                    if (response.ok) {
-                        // 응답 받은 즉시 상태값 업데이트
-                        document.getElementById("status-value").textContent =
-                            data.status;
-                        document.getElementById("status-success").textContent =
-                            "상태가 성공적으로 업데이트되었습니다.";
-                        // 0.5초 후에 성공 메시지 삭제
-                        setTimeout(() => {
-                            document.getElementById("status-success").textContent = "";
-                        }, 500);
-                    } else {
-                        document.getElementById("status-error").textContent =
-                            data.error || "오류가 발생했습니다.";
-                    }
-                } catch (error) {
-                    document.getElementById("status-error").textContent =
-                        "상태 업데이트 중 오류가 발생했습니다.";
-                }
+                updateStatusField('camera_value', Number(selected.value));
             }
 
+            function updateOCR() {
+                clearMessages('ocr');
+                const input = document.getElementById('ocr-input');
+                if (!input) return;
+                const normalized = setOCRInputValue(input.value);
+                if (!normalized) {
+                    document.getElementById('ocr-error').textContent = '올바른 시간(HH:MM:SS)을 입력하세요.';
+                    return;
+                }
+                updateStatusField('ocr_value', normalized);
+            }
 
+            function updateHDMI() {
+                clearMessages('hdmi');
+                const selected = document.querySelector('input[name="hdmi"]:checked');
+                if (!selected) {
+                    document.getElementById('hdmi-error').textContent = 'HDMI 상태를 선택하세요.';
+                    return;
+                }
+                updateStatusField('hdmi_value', Number(selected.value));
+            }
 
+            function updateAC() {
+                clearMessages('ac');
+                const selected = document.querySelector('input[name="ac"]:checked');
+                if (!selected) {
+                    document.getElementById('ac-error').textContent = 'AC 상태를 선택하세요.';
+                    return;
+                }
+                updateStatusField('ac_value', Number(selected.value));
+            }
 
-            // 페이지 로드 시 초기 데이터 가져오기
+            function updateDC() {
+                clearMessages('dc');
+                const selected = document.querySelector('input[name="dc"]:checked');
+                if (!selected) {
+                    document.getElementById('dc-error').textContent = 'DC 상태를 선택하세요.';
+                    return;
+                }
+                updateStatusField('dc_value', Number(selected.value));
+            }
+
             window.onload = function () {
                 refreshStatus();
+                const ocrInput = document.getElementById('ocr-input');
+                if (ocrInput) {
+                    const openPicker = () => {
+                        if (typeof ocrInput.showPicker === 'function') {
+                            ocrInput.showPicker();
+                        }
+                    };
+                    ocrInput.addEventListener('focus', openPicker);
+                    ocrInput.addEventListener('click', openPicker);
+                }
             };
         </script>
     </body>
