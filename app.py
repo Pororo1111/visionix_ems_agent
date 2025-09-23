@@ -9,6 +9,7 @@ from prometheus_client import (
 )
 import psutil
 import time
+from datetime import datetime, timedelta, timezone
 import threading
 import re
 import math
@@ -65,6 +66,9 @@ http_request_duration = Histogram('http_request_duration_seconds', 'HTTP request
 
 OCR_PATTERN = re.compile(r'^\d{1,2}:\d{2}:\d{2}$')
 
+# 고정 KST(+09:00) 타임존
+KST = timezone(timedelta(hours=9))
+
 
 def _hms_to_seconds(value: str) -> int:
     hours, minutes, seconds = value.split(':')
@@ -79,11 +83,35 @@ def _seconds_to_hms(value: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{remaining:02d}"
 
 
+def _hms_kst_to_epoch_seconds(value: str) -> int:
+    hours, minutes, seconds = map(int, value.split(':'))
+    today_kst = datetime.now(tz=KST).date()
+    dt_kst = datetime(
+        year=today_kst.year,
+        month=today_kst.month,
+        day=today_kst.day,
+        hour=hours,
+        minute=minutes,
+        second=seconds,
+        tzinfo=KST,
+    )
+    return int(dt_kst.timestamp())
+
+
+def _epoch_seconds_to_hms_kst(epoch_seconds: int) -> str:
+    try:
+        dt_kst = datetime.fromtimestamp(int(epoch_seconds), tz=KST)
+    except (OverflowError, OSError, ValueError):  # 범위를 벗어난 경우 방어
+        return "00:00:00"
+    return dt_kst.strftime("%H:%M:%S")
+
+
 def _update_metric(field: str, value):
     if field == 'camera_value':
         g_camera_value.set(value)
     elif field == 'ocr_value':
-        info_ocr_value.info({'value': _seconds_to_hms(value)})
+        # value는 이제 '에폭 초'로 저장/표시
+        info_ocr_value.info({'value': _epoch_seconds_to_hms_kst(value)})
         g_ocr_seconds.set(value)
     elif field == 'hdmi_value':
         g_hdmi_value.set(value)
@@ -109,17 +137,17 @@ def _validate_and_cast(field: str, raw_value):
         if isinstance(raw_value, str):
             if not OCR_PATTERN.match(raw_value):
                 raise ValueError('ocr_value must follow HH:MM:SS format')
-            value = _hms_to_seconds(raw_value)
+            # 문자열(HH:MM:SS)은 '오늘 KST 기준 시각'으로 간주하여 에폭 초로 변환
+            value = _hms_kst_to_epoch_seconds(raw_value)
         elif isinstance(raw_value, (int, float)):
             if not math.isfinite(raw_value):
                 raise ValueError('ocr_value must be a finite number or HH:MM:SS string')
+            # 숫자는 '에폭 초'로 간주
             value = int(raw_value)
         else:
             raise ValueError('ocr_value must be a HH:MM:SS string or number of seconds')
         if value < 0:
             raise ValueError('ocr_value must be zero or positive')
-        if value >= 24 * 3600:
-            raise ValueError('ocr_value must be less than 86400 seconds (24 hours)')
         return value
 
     try:
