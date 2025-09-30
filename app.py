@@ -17,8 +17,16 @@ import os
 import json
 from urllib import request as urlrequest
 from urllib.error import URLError, HTTPError
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 
 app = Flask(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+)
+logger = logging.getLogger('visionix.agent')
 
 # 상태 값 기본 설정
 DEFAULT_STATUS = {
@@ -328,37 +336,59 @@ def _poll_devices_loop():
         'dc': int(os.getenv('DC_PORT', '5005')),
     }
 
+    # 실행 중 재사용할 스레드 풀 (최대 동시 5개)
+    executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix='fetch')
+
     while True:
         try:
             payload = {}
-            cam = _fetch_json(f"http://{hosts['camera']}:{ports['camera']}/status")
-            if cam and 'camera_value' in cam:
-                payload['camera_value'] = cam['camera_value']
 
-            hdmi = _fetch_json(f"http://{hosts['hdmi']}:{ports['hdmi']}/status")
-            if hdmi and 'hdmi_value' in hdmi:
-                payload['hdmi_value'] = hdmi['hdmi_value']
+            # 요청 대상과 기대 키 매핑
+            targets = {
+                'camera': (f"http://{hosts['camera']}:{ports['camera']}/status", 'camera_value'),
+                'hdmi': (f"http://{hosts['hdmi']}:{ports['hdmi']}/status", 'hdmi_value'),
+                'ocr': (f"http://{hosts['ocr']}:{ports['ocr']}/status", 'ocr_value'),
+                'ac': (f"http://{hosts['ac']}:{ports['ac']}/status", 'ac_value'),
+                'dc': (f"http://{hosts['dc']}:{ports['dc']}/status", 'dc_value'),
+            }
 
-            ocr = _fetch_json(f"http://{hosts['ocr']}:{ports['ocr']}/status")
-            if ocr and 'ocr_value' in ocr:
-                payload['ocr_value'] = ocr['ocr_value']
+            futures = {}
+            for name, (url, expect_key) in targets.items():
+                fut = executor.submit(_fetch_json, url)
+                futures[fut] = (name, expect_key)
 
-            ac = _fetch_json(f"http://{hosts['ac']}:{ports['ac']}/status")
-            if ac and 'ac_value' in ac:
-                payload['ac_value'] = ac['ac_value']
+            completed_names = set()
+            try:
+                for fut in as_completed(futures, timeout=3.0):
+                    name, expect_key = futures[fut]
+                    completed_names.add(name)
+                    try:
+                        data = fut.result()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("%s 서버 요청 실패: %s", name, exc)
+                        continue
 
-            dc = _fetch_json(f"http://{hosts['dc']}:{ports['dc']}/status")
-            if dc and 'dc_value' in dc:
-                payload['dc_value'] = dc['dc_value']
+                    if data and expect_key in data:
+                        payload[expect_key] = data[expect_key]
+                        logger.info("%s 서버 값 수집 성공: %s", name, data[expect_key])
+                    else:
+                        logger.warning("%s 서버 값 수집 실패: %s", name, data)
+            except FuturesTimeout:
+                # 타임아웃으로 완료 못한 작업 로깅
+                pass
+
+            # 타임아웃 등으로 미완료된 대상 경고 처리
+            for name, (_url, expect_key) in targets.items():
+                if name not in completed_names:
+                    logger.warning("%s 서버 요청 타임아웃", name)
 
             if payload:
                 try:
                     _apply_updates(payload)
-                except ValueError:
-                    pass
+                except ValueError as exc:
+                    logger.warning("수집 데이터 적용 실패: %s", exc)
         except Exception:
-            # 폴링 루프의 예기치 못한 예외는 무시하고 다음 주기로 진행
-            pass
+            logger.exception("장비 폴링 루프 처리 중 예외 발생")
 
         time.sleep(5)
 
